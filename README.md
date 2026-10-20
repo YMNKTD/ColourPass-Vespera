@@ -68,5 +68,5 @@ This project is currently in the planning and prototyping stage. The proposed fu
 Source code, circuit diagrams, testing results, and prototype photographs will be added as development progresses.
 
 
-#
-*This project is designed by Monong Yang (Morgan)*
+---
+*Designed by Monong Yang (Morgan)*

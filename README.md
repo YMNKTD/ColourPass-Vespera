@@ -1,7 +1,9 @@
 
-# ColourPass – An Interactive Lighting Controller
+<p align="center">
+  <img src="Images/colourpass-icon.png" alt="ColourPass Logo" width="250">
+</p>
 
-## Designed by Monong Yang (Morgan)
+# ColourPass – An Interactive Lighting Controller
 
 ## Project Overview
 
@@ -64,3 +66,7 @@ The Arduino will connect to the network via Wi-Fi and use MQTT to send lighting 
 This project is currently in the planning and prototyping stage. The proposed functionality will be implemented and evaluated through iterative development.
 
 Source code, circuit diagrams, testing results, and prototype photographs will be added as development progresses.
+
+
+#
+*This project is designed by Monong Yang (Morgan)*

@@ -23,6 +23,8 @@ The Vespera installation was not available during home testing. For later develo
 | S3 | 3 |
 | OUT | 4 |
 
+![ColourPass circuit setup](circuit_connection_part_01.jpg)
+
 
 ## 3. Testing Method
 
@@ -42,6 +44,24 @@ The following values are representative observations from screenshots, not avera
 | Green | #00FF00 | 446 | 282 | 880 |
 | Blue | #0000FF | 3637 | 1016 | 284 |
 | White | #FFFFFF | 108 | 164 | 180 |
+
+### Sensor Readings
+
+**Red Screen**
+
+![Red screen result](result_red.png)
+
+**Green Screen**
+
+![Green screen result](result_green.png)
+
+**Blue Screen**
+
+![Blue screen result](result_blue.png)
+
+**White Screen**
+
+![White screen result](result_white.png)
 
 
 ## 5. Observations

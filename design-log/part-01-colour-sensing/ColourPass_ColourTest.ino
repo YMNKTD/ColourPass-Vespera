@@ -1,5 +1,5 @@
 
-/*##
+/*
   ColourPass - Day 1
   DFRobot TCS3200 Colour Sensor Test
   Arduino MKR WiFi 1010

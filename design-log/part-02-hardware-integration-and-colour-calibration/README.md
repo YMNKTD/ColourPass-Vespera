@@ -60,6 +60,10 @@ The program scans I2C addresses and displays detected devices in the Serial Moni
 
 It also reads the touch sensor state to confirm whether touch input can be detected.
 
+**I2C Result**
+
+![I2C Testing Result](/design-log/part-02-hardware-integration-and-colour-calibration/I2C%20Testing%20Result.png)
+
 **Code:**
 
 [ColourPass_Hardware_I2C_Test.ino](/design-log/part-02-hardware-integration-and-colour-calibration/ColourPass_Hardware_I2C_Test.ino)

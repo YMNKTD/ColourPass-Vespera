@@ -53,8 +53,10 @@ The physical switch is intended for powering the device on and off.
 
 - Arduino MKR WiFi 1010
 - DFRobot Colour Sensor
-- Grove Touch Sensor
-- Physical Power Switch
+- Touch Sensor
+- ON/OFF Switch
+- LCD1602 Screen
+- 3.7V 1200mAh Battery
 - Vespera Light Installation
 
 ## Communication

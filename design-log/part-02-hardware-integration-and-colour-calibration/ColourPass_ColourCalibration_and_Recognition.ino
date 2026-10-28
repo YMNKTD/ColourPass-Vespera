@@ -1,29 +1,27 @@
 
 /*
-  ColourPass - Colour Calibration and Recognition
-  Arduino MKR WiFi 1010
+ ColourPass - Colour Calibration and Recognition
+ Arduino MKR WiFi 1010
 
-  Improvements:
-  - Automatic background capture on startup
-  - Reconfirm empty background after calibration
-  - Median filtering for more stable readings
-  - Reject ambiguous colour classifications
-  - Continuous multi-ticket validation
-  - LCD lighting previews
+ TOUCH CONTROL:
+ - Short tap: calibration / lighting effect change
+ - Hold 3–5 seconds, then release: background recheck
+ - Hold >= 5 seconds, then release: reboot & recalibrate
 
-  Colour Sensor:
-    S0=D0, S1=D1, S2=D2, S3=D3, OUT=D4
-    OE=GND, VDD=3.3V, GND=GND
+ Colour sensor:
+ S0=D0, S1=D1, S2=D2, S3=D3, OUT=D4
 
-  Touch Sensor:
-    S=D5, +=3.3V, -=GND
+ Touch sensor:
+ S=D5, +=3.3V, -=GND
 
-  LCD1602 RGB:
-    SDA=D11, SCL=D12, VCC=3.3V, GND=GND
+ LCD1602 RGB:
+ SDA=D11, SCL=D12, VCC=3.3V, GND=GND
 
-  Serial Monitor: 115200 baud
+ Serial Monitor: 115200 baud
+ MQTT is not included.
 */
 
+#include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
 #include <Waveshare_LCD1602_RGB.h>
@@ -32,12 +30,12 @@
 // 1. PIN CONFIGURATION
 // =====================================================
 
-const byte PIN_S0 = 0;
-const byte PIN_S1 = 1;
-const byte PIN_S2 = 2;
-const byte PIN_S3 = 3;
-const byte PIN_OUT = 4;
-const byte PIN_TOUCH = 5;
+const byte S0_PIN = 0;
+const byte S1_PIN = 1;
+const byte S2_PIN = 2;
+const byte S3_PIN = 3;
+const byte OUT_PIN = 4;
+const byte TOUCH_PIN = 5;
 
 Waveshare_LCD1602_RGB lcd(16, 2);
 
@@ -45,26 +43,25 @@ Waveshare_LCD1602_RGB lcd(16, 2);
 // 2. TIMING
 // =====================================================
 
-const unsigned long PULSE_TIMEOUT_US = 80000UL;
-const unsigned long SCAN_INTERVAL_MS = 190UL;
-const unsigned long LONG_PRESS_MS = 3000UL;
 const unsigned long DEBOUNCE_MS = 40UL;
 
-const unsigned long CONFIRM_MS = 2000UL;
+const unsigned long BG_HOLD_MS = 3000UL;
+const unsigned long REBOOT_HOLD_MS = 5000UL;
+
+const unsigned long SCAN_INTERVAL_MS = 190UL;
+const unsigned long GRANTED_MS = 2000UL;
 const unsigned long DENIED_MS = 1900UL;
-const unsigned long RESET_MS = 450UL;
 const unsigned long ANIMATION_MS = 140UL;
 const unsigned long LOG_MS = 1000UL;
 
-// Preliminary thresholds.
-// Adjust using actual experimental results.
+const int STABLE_READS = 3;
 
-const float MIN_BACKGROUND_DISTANCE = 0.12f;
+// Preliminary classification thresholds.
+
+const float MIN_BG_DISTANCE = 0.12f;
 const float MAX_CARD_DISTANCE = 0.18f;
-const float REQUIRED_BACKGROUND_ADVANTAGE = 0.08f;
-const float MIN_RUNNER_UP_GAP = 0.018f;
-
-const int REQUIRED_STABLE = 3;
+const float BG_ADVANTAGE = 0.08f;
+const float MIN_SECOND_GAP = 0.018f;
 
 // =====================================================
 // 3. CARD COLOURS
@@ -86,7 +83,7 @@ enum Card {
 
 const int CARD_COUNT = 9;
 
-const char* const CARD_LABELS[CARD_COUNT] = {
+const char* const CARD_NAMES[CARD_COUNT] = {
   "RED",
   "ORANGE",
   "PINK",
@@ -99,26 +96,25 @@ const char* const CARD_LABELS[CARD_COUNT] = {
 };
 
 // =====================================================
-// 4. DEVICE MODES
+// 4. SYSTEM STATES
 // =====================================================
 
-enum Mode {
-  MODE_CAL,
-  MODE_CONFIRM_EMPTY,
-  MODE_WAIT_EMPTY,
-  MODE_READY,
-  MODE_GRANTED,
-  MODE_DENIED,
-  MODE_STATIC,
-  MODE_AMBIENT,
-  MODE_NO_MODE,
-  MODE_RESET
+enum State {
+  ST_CALIBRATE,
+  ST_BG_CONFIRM,
+  ST_WAIT_EMPTY,
+  ST_READY,
+  ST_GRANTED,
+  ST_DENIED,
+  ST_STATIC,
+  ST_AMBIENT,
+  ST_NO_MODE
 };
 
-Mode mode = MODE_CAL;
+State state = ST_CALIBRATE;
 
 // =====================================================
-// 5. DATA STRUCTURES
+// 5. SENSOR STRUCTURES
 // =====================================================
 
 struct Raw {
@@ -136,50 +132,52 @@ struct Feature {
   float logC;
 };
 
-struct Result {
+struct Match {
   int card;
-  float dBG;
+  float dBg;
   float best;
   float second;
 };
 
-Feature background = {0, 0, 0, 0};
+Feature bgReference = {0, 0, 0, 0};
 Feature profiles[CARD_COUNT];
 
-float backgroundNoise = 0;
-float emptyGate = MIN_BACKGROUND_DISTANCE;
+float emptyGate = MIN_BG_DISTANCE;
 
-int calIndex = 0;
-int ticket = CARD_UNKNOWN;
-
+int calibrationIndex = 0;
+int currentTicket = CARD_UNKNOWN;
 int lastTriggered = CARD_UNKNOWN;
+
 int candidate = CARD_UNKNOWN;
 int candidateCount = 0;
 int effectIndex = 0;
 
-unsigned long stateTime = 0;
-unsigned long lastScan = 0;
-unsigned long lastLog = 0;
-unsigned long lastAnim = 0;
+bool resumeCalibrationAfterBg = false;
 
-// Touch input
-
-bool touchRawPrev = false;
-bool touchStable = false;
-bool longPressDone = false;
-
-unsigned long touchChanged = 0;
-unsigned long pressedAt = 0;
+unsigned long stateAt = 0;
+unsigned long lastScanAt = 0;
+unsigned long lastAnimAt = 0;
+unsigned long lastLogAt = 0;
 
 // =====================================================
-// 6. LCD HELPERS
+// 6. TOUCH VARIABLES
+// =====================================================
+
+bool touchRawPrevious = false;
+bool touchStable = false;
+
+unsigned long touchEdgeAt = 0;
+unsigned long touchPressedAt = 0;
+
+// =====================================================
+// 7. LCD HELPERS
 // =====================================================
 
 const char* cardName(int c) {
   if (c == CARD_EMPTY) return "EMPTY";
 
   if (c >= 0 && c < CARD_COUNT) {
-    return CARD_LABELS[c];
+    return CARD_NAMES[c];
   }
 
   return "UNKNOWN";
@@ -188,12 +186,12 @@ const char* cardName(int c) {
 void displayText(
   const char* top,
   const char* bottom,
-  byte r,
-  byte g,
-  byte b
+  byte red,
+  byte green,
+  byte blue
 ) {
   lcd.clear();
-  lcd.setRGB(r, g, b);
+  lcd.setRGB(red, green, blue);
 
   lcd.setCursor(0, 0);
   lcd.send_string(top);
@@ -203,20 +201,16 @@ void displayText(
 }
 
 // =====================================================
-// 7. SENSOR READING
+// 8. SENSOR READING
 // =====================================================
 
 unsigned long readChannel(byte s2, byte s3) {
-  digitalWrite(PIN_S2, s2);
-  digitalWrite(PIN_S3, s3);
+  digitalWrite(S2_PIN, s2);
+  digitalWrite(S3_PIN, s3);
 
   delay(5);
 
-  return pulseIn(
-    PIN_OUT,
-    LOW,
-    PULSE_TIMEOUT_US
-  );
+  return pulseIn(OUT_PIN, LOW, 80000UL);
 }
 
 Raw readRaw() {
@@ -227,80 +221,73 @@ Raw readRaw() {
   x.b = readChannel(LOW, HIGH);
   x.c = readChannel(HIGH, LOW);
 
-  x.ok =
-    x.r > 0 &&
-    x.g > 0 &&
-    x.b > 0 &&
-    x.c > 0;
+  x.ok = x.r && x.g && x.b && x.c;
 
   return x;
 }
 
 // =====================================================
-// 8. MEDIAN FILTER
+// 9. MEDIAN FILTER
 // =====================================================
 
-unsigned long median(unsigned long* a, int n) {
-  for (int i = 1; i < n; i++) {
-    unsigned long v = a[i];
+unsigned long median(
+  unsigned long* values,
+  int n
+) {
+  for (int i = 1; i < n; ++i) {
+    unsigned long val = values[i];
     int j = i - 1;
 
-    while (j >= 0 && a[j] > v) {
-      a[j + 1] = a[j];
-      j--;
+    while (j >= 0 && values[j] > val) {
+      values[j + 1] = values[j];
+      --j;
     }
 
-    a[j + 1] = v;
+    values[j + 1] = val;
   }
 
-  return a[n / 2];
+  return values[n / 2];
 }
 
 Raw sampleMedian(int n) {
-  unsigned long rr[11];
-  unsigned long gg[11];
-  unsigned long bb[11];
-  unsigned long cc[11];
-
   Raw invalid = {0, 0, 0, 0, false};
 
-  if (
-    n < 1 ||
-    n > 11 ||
-    n % 2 == 0
-  ) {
+  if (n < 1 || n > 11 || n % 2 == 0) {
     return invalid;
   }
 
-  for (int i = 0; i < n; i++) {
+  unsigned long r[11];
+  unsigned long g[11];
+  unsigned long b[11];
+  unsigned long c[11];
+
+  for (int i = 0; i < n; ++i) {
     Raw x = readRaw();
 
-    if (!x.ok) {
-      return invalid;
-    }
+    if (!x.ok) return invalid;
 
-    rr[i] = x.r;
-    gg[i] = x.g;
-    bb[i] = x.b;
-    cc[i] = x.c;
+    r[i] = x.r;
+    g[i] = x.g;
+    b[i] = x.b;
+    c[i] = x.c;
   }
 
-  Raw v = {
-    median(rr, n),
-    median(gg, n),
-    median(bb, n),
-    median(cc, n),
+  Raw out = {
+    median(r, n),
+    median(g, n),
+    median(b, n),
+    median(c, n),
     true
   };
 
-  return v;
+  return out;
 }
 
 // =====================================================
-// 9. FEATURE EXTRACTION
+// 10. FEATURE EXTRACTION
 // =====================================================
 
-Feature features(Raw x) {
+Feature makeFeature(const Raw& x) {
   float r = 1.0f / (float)x.r;
   float g = 1.0f / (float)x.g;
   float b = 1.0f / (float)x.b;
@@ -317,18 +304,20 @@ Feature features(Raw x) {
   return f;
 }
 
-float distanceF(Feature a, Feature b) {
+float featureDistance(
+  const Feature& a,
+  const Feature& b
+) {
   float dr = a.r - b.r;
   float dg = a.g - b.g;
   float db = a.b - b.b;
   float dc = a.logC - b.logC;
 
-  return
-    6.0f * (dr * dr + dg * dg + db * db)
-    + 0.18f * dc * dc;
+  return 6.0f * (dr*dr + dg*dg + db*db)
+       + 0.18f * dc*dc;
 }
 
-void printRaw(Raw x) {
+void logRaw(const Raw& x) {
   Serial.print("R:");
   Serial.print(x.r);
 
@@ -343,7 +332,7 @@ void printRaw(Raw x) {
 }
 
 // =====================================================
-// 10. BACKGROUND CALIBRATION
+// 11. BACKGROUND CALIBRATION
 // =====================================================
 
 bool captureBackground() {
@@ -354,36 +343,37 @@ bool captureBackground() {
     return false;
   }
 
-  Feature fa = features(a);
-  Feature fb = features(b);
+  Feature f1 = makeFeature(a);
+  Feature f2 = makeFeature(b);
 
-  background = fa;
+  float noise = featureDistance(f1, f2);
 
-  backgroundNoise = distanceF(fa, fb);
-
-  emptyGate = fmaxf(
-    MIN_BACKGROUND_DISTANCE,
-    4.0f * backgroundNoise + 0.04f
+  float proposedGate = fmaxf(
+    MIN_BG_DISTANCE,
+    4.0f * noise + 0.04f
   );
 
-  if (emptyGate > 0.25f) {
+  if (proposedGate > 0.25f) {
     return false;
   }
 
+  bgReference = f1;
+  emptyGate = proposedGate;
+
   Serial.print("EMPTY BACKGROUND | ");
-  printRaw(a);
+  logRaw(a);
 
   Serial.print("Noise=");
-  Serial.print(backgroundNoise, 4);
+  Serial.print(noise, 4);
 
-  Serial.print(" EmptyGate=");
+  Serial.print(" Gate=");
   Serial.println(emptyGate, 4);
 
   return true;
 }
 
 // =====================================================
-// 11. COLOUR CALIBRATION
+// 12. COLOUR CALIBRATION
 // =====================================================
 
 void showCalibration() {
@@ -392,9 +382,9 @@ void showCalibration() {
   snprintf(
     line,
     sizeof(line),
-    "CAL %02d/09 %s",
-    calIndex + 1,
-    CARD_LABELS[calIndex]
+    "CAL %c/9 %.7s",
+    char('1' + calibrationIndex),
+    CARD_NAMES[calibrationIndex]
   );
 
   displayText(
@@ -403,118 +393,98 @@ void showCalibration() {
     35, 65, 160
   );
 
-  Serial.print("Place and tap: ");
-  Serial.println(CARD_LABELS[calIndex]);
+  Serial.print("Calibrate: ");
+  Serial.println(CARD_NAMES[calibrationIndex]);
 }
 
-void captureCard() {
-  Raw v = sampleMedian(11);
+void enterState(State next);
 
-  if (!v.ok) {
+void calibrateCurrentCard() {
+  Raw x = sampleMedian(11);
+
+  if (!x.ok) {
     displayText(
       "SENSOR TIMEOUT",
       "TAP TO RETRY",
-      255, 40, 0
+      255, 30, 0
     );
 
-    delay(650);
+    delay(500);
     showCalibration();
     return;
   }
 
-  Feature f = features(v);
+  Feature f = makeFeature(x);
 
-  profiles[calIndex] = f;
+  profiles[calibrationIndex] = f;
 
-  Serial.print("CAL ");
-  Serial.print(CARD_LABELS[calIndex]);
+  Serial.print("CAL SAVED ");
+  Serial.print(CARD_NAMES[calibrationIndex]);
   Serial.print(" | ");
-  printRaw(v);
 
-  float d = distanceF(f, background);
+  logRaw(x);
 
-  Serial.print("Difference from empty: ");
-  Serial.println(d, 4);
+  Serial.print("Distance from BG: ");
+  Serial.println(
+    featureDistance(f, bgReference),
+    4
+  );
 
-  if (d < emptyGate + 0.04f) {
-    Serial.println(
-      "WARNING: Card too similar to background."
-    );
-  }
+  ++calibrationIndex;
 
-  calIndex++;
-
-  if (calIndex < CARD_COUNT) {
+  if (calibrationIndex < CARD_COUNT) {
     showCalibration();
   } else {
-    mode = MODE_CONFIRM_EMPTY;
-
-    displayText(
-      "REMOVE ALL CARDS",
-      "TAP WHEN EMPTY",
-      30, 65, 170
-    );
-
-    Serial.println(
-      "REMOVE ALL CARDS, then TAP to confirm empty."
-    );
+    resumeCalibrationAfterBg = false;
+    enterState(ST_BG_CONFIRM);
   }
 }
 
 // =====================================================
-// 12. CONFIDENCE-BASED CLASSIFICATION
+// 13. COLOUR CLASSIFICATION
 // =====================================================
 
-Result classify(Feature f) {
-  Result out = {
+Match classify(const Feature& f) {
+  Match m = {
     CARD_UNKNOWN,
-    distanceF(f, background),
+    featureDistance(f, bgReference),
     1e9f,
     1e9f
   };
 
   int nearest = CARD_UNKNOWN;
 
-  for (int i = 0; i < CARD_COUNT; i++) {
-    float d = distanceF(f, profiles[i]);
+  for (int i = 0; i < CARD_COUNT; ++i) {
+    float d = featureDistance(f, profiles[i]);
 
-    if (d < out.best) {
-      out.second = out.best;
-      out.best = d;
+    if (d < m.best) {
+      m.second = m.best;
+      m.best = d;
       nearest = i;
-    } else if (d < out.second) {
-      out.second = d;
+    } else if (d < m.second) {
+      m.second = d;
     }
   }
 
-  // Background takes priority over ticket matching.
-
-  if (out.dBG <= emptyGate) {
-    out.card = CARD_EMPTY;
-    return out;
-  }
-
-  // Require a close colour match and a clear
-  // advantage over the background and runner-up.
-
-  if (
-    out.best <= MAX_CARD_DISTANCE &&
-    out.best + REQUIRED_BACKGROUND_ADVANTAGE
-      < out.dBG &&
-    out.second - out.best >= MIN_RUNNER_UP_GAP
+  if (m.dBg <= emptyGate) {
+    m.card = CARD_EMPTY;
+  } else if (
+    m.best <= MAX_CARD_DISTANCE &&
+    m.best + BG_ADVANTAGE < m.dBg &&
+    m.second - m.best >= MIN_SECOND_GAP
   ) {
-    out.card = nearest;
+    m.card = nearest;
   }
 
-  return out;
+  return m;
 }
 
 // =====================================================
-// 13. STATIC LIGHTING PREVIEW
+// 14. STATIC LIGHTING
 // =====================================================
 
 void showStatic() {
-  const char* names[5] = {
+  const char* const names[5] = {
     "GREEN",
     "YELLOW",
     "BLUE",
@@ -543,18 +513,18 @@ void showStatic() {
 
   displayText(
     line,
-    "TAP/HOLD 3 SEC",
+    "TAP / HOLD",
     rgb[i][0],
     rgb[i][1],
     rgb[i][2]
   );
 
-  Serial.print("PREVIEW STATIC ");
+  Serial.print("STATIC PREVIEW: ");
   Serial.println(names[i]);
 }
 
 // =====================================================
-// 14. AMBIENT LIGHTING PREVIEW
+// 15. AMBIENT LIGHTING
 // =====================================================
 
 void showAmbient() {
@@ -569,108 +539,153 @@ void showAmbient() {
 
   displayText(
     line,
-    "TAP/HOLD 3 SEC",
+    "TAP / HOLD",
     25, 35, 170
   );
 
-  Serial.print("PREVIEW AMBIENT ");
+  Serial.print("AMBIENT PREVIEW: ");
   Serial.println(effectIndex % 5 + 1);
 }
 
 // =====================================================
-// 15. DEVICE STATE MANAGEMENT
+// 16. DEVICE STATE MANAGEMENT
 // =====================================================
 
-void enterMode(Mode m) {
-  mode = m;
-  stateTime = millis();
-  lastAnim = 0;
+void enterState(State next) {
+  state = next;
+  stateAt = millis();
+  lastAnimAt = 0;
 
-  if (m == MODE_READY) {
-    displayText(
-      "COLOURPASS",
-      "SCAN YOUR TICKET",
-      30, 65, 170
-    );
+  char line[17];
 
-    Serial.println(
-      "READY: Waiting for a new ticket."
-    );
-  }
+  switch (next) {
+    case ST_CALIBRATE:
+      showCalibration();
+      break;
 
-  else if (m == MODE_GRANTED) {
-    char line[17];
+    case ST_BG_CONFIRM:
+      displayText(
+        "REMOVE ALL CARDS",
+        "TAP WHEN EMPTY",
+        30, 65, 170
+      );
 
-    snprintf(
-      line,
-      sizeof(line),
-      "VALID: %s",
-      cardName(ticket)
-    );
+      Serial.println(
+        "EMPTY CHECK: remove cards, then short-tap."
+      );
+      break;
 
-    displayText(
-      "ACCESS GRANTED",
-      line,
-      0, 220, 25
-    );
-  }
+    case ST_WAIT_EMPTY:
+      displayText(
+        "CHECKING EMPTY",
+        "WAIT...",
+        30, 65, 170
+      );
+      break;
 
-  else if (m == MODE_DENIED) {
-    char line[17];
+    case ST_READY:
+      displayText(
+        "COLOURPASS",
+        "SCAN YOUR TICKET",
+        30, 65, 170
+      );
 
-    snprintf(
-      line,
-      sizeof(line),
-      "INVALID: %s",
-      cardName(ticket)
-    );
+      Serial.println(
+        "READY: continuous scanning"
+      );
+      break;
 
-    displayText(
-      "ACCESS DENIED",
-      line,
-      255, 0, 0
-    );
-  }
+    case ST_GRANTED:
+      snprintf(
+        line,
+        sizeof(line),
+        "VALID: %s",
+        cardName(currentTicket)
+      );
 
-  else if (m == MODE_STATIC) {
-    showStatic();
-  }
+      displayText(
+        "ACCESS GRANTED",
+        line,
+        0, 220, 25
+      );
+      break;
 
-  else if (m == MODE_AMBIENT) {
-    showAmbient();
-  }
+    case ST_DENIED:
+      snprintf(
+        line,
+        sizeof(line),
+        "INVALID: %s",
+        cardName(currentTicket)
+      );
 
-  else if (m == MODE_NO_MODE) {
-    displayText(
-      "NO LIGHTING MODE",
-      "WHITE/BLACK CARD",
-      75, 60, 60
-    );
-  }
+      displayText(
+        "ACCESS DENIED",
+        line,
+        255, 0, 0
+      );
+      break;
 
-  else if (m == MODE_RESET) {
-    displayText(
-      "RESET COMPLETE",
-      "REMOVE CARD",
-      240, 240, 240
-    );
-  }
+    case ST_STATIC:
+      showStatic();
+      break;
 
-  else if (m == MODE_WAIT_EMPTY) {
-    displayText(
-      "CHECKING EMPTY",
-      "TAP TO RELEARN",
-      30, 65, 170
-    );
+    case ST_AMBIENT:
+      showAmbient();
+      break;
+
+    case ST_NO_MODE:
+      displayText(
+        "NO LIGHTING MODE",
+        "REMOVE CARD",
+        65, 55, 55
+      );
+      break;
   }
 }
 
 // =====================================================
-// 16. NEW TICKET HANDLING
+// 17. CONFIRM EMPTY BACKGROUND
+// =====================================================
+
+void confirmEmptyBackground() {
+  displayText(
+    "SAVING EMPTY...",
+    "NO CARD PLEASE",
+    30, 65, 170
+  );
+
+  if (!captureBackground()) {
+    displayText(
+      "BG UNSTABLE",
+      "TAP TO RETRY",
+      255, 35, 0
+    );
+
+    delay(650);
+    enterState(ST_BG_CONFIRM);
+    return;
+  }
+
+  candidate = CARD_UNKNOWN;
+  candidateCount = 0;
+  lastTriggered = CARD_UNKNOWN;
+
+  lastScanAt = millis();
+
+  if (resumeCalibrationAfterBg) {
+    resumeCalibrationAfterBg = false;
+    enterState(ST_CALIBRATE);
+  } else {
+    enterState(ST_WAIT_EMPTY);
+  }
+}
+
+// =====================================================
+// 18. NEW TICKET DETECTION
 // =====================================================
 
 void newTicket(int c) {
-  ticket = c;
+  currentTicket = c;
   lastTriggered = c;
 
   Serial.print("NEW TICKET -> ");
@@ -681,43 +696,38 @@ void newTicket(int c) {
     c == CARD_ORANGE ||
     c == CARD_PINK
   ) {
-    enterMode(MODE_DENIED);
-  }
-
-  else if (
+    enterState(ST_DENIED);
+  } else if (
     c == CARD_YELLOW ||
     c == CARD_GREEN ||
     c == CARD_BLUE ||
     c == CARD_PURPLE
   ) {
-    enterMode(MODE_GRANTED);
-  }
-
-  else {
-    enterMode(MODE_NO_MODE);
+    enterState(ST_GRANTED);
+  } else {
+    enterState(ST_NO_MODE);
   }
 }
 
 // =====================================================
-// 17. CONTINUOUS TICKET SCANNING
+// 19. CONTINUOUS COLOUR SCANNING
 // =====================================================
 
-void processColour() {
+void scanTickets() {
   if (
-    mode == MODE_CAL ||
-    mode == MODE_CONFIRM_EMPTY ||
-    mode == MODE_RESET
+    state == ST_CALIBRATE ||
+    state == ST_BG_CONFIRM
   ) {
     return;
   }
 
   unsigned long now = millis();
 
-  if (now - lastScan < SCAN_INTERVAL_MS) {
+  if (now - lastScanAt < SCAN_INTERVAL_MS) {
     return;
   }
 
-  lastScan = now;
+  lastScanAt = now;
 
   Raw v = sampleMedian(3);
 
@@ -729,212 +739,76 @@ void processColour() {
     return;
   }
 
-  Result r = classify(features(v));
+  Match m = classify(makeFeature(v));
 
-  if (now - lastLog >= LOG_MS) {
-    lastLog = now;
+  if (now - lastLogAt >= LOG_MS) {
+    lastLogAt = now;
 
-    printRaw(v);
+    logRaw(v);
 
     Serial.print("Class=");
-    Serial.print(cardName(r.card));
+    Serial.print(cardName(m.card));
 
     Serial.print(" dBG=");
-    Serial.print(r.dBG, 3);
+    Serial.print(m.dBg, 3);
 
     Serial.print(" dCard=");
-    Serial.print(r.best, 3);
+    Serial.print(m.best, 3);
 
     Serial.print(" gap=");
-    Serial.println(r.second - r.best, 3);
+    Serial.println(m.second - m.best, 3);
   }
 
-  // Require multiple consistent detections.
-
-  if (r.card == candidate) {
-    if (candidateCount < REQUIRED_STABLE) {
-      candidateCount++;
+  if (m.card == candidate) {
+    if (candidateCount < STABLE_READS) {
+      ++candidateCount;
     }
   } else {
-    candidate = r.card;
+    candidate = m.card;
     candidateCount = 1;
   }
 
-  if (candidateCount < REQUIRED_STABLE) {
+  if (candidateCount < STABLE_READS) {
     return;
   }
 
-  // Re-arm when card is removed.
-
-  if (r.card == CARD_EMPTY) {
+  if (m.card == CARD_EMPTY) {
     lastTriggered = CARD_UNKNOWN;
 
-    if (mode == MODE_WAIT_EMPTY) {
-      enterMode(MODE_READY);
+    if (state == ST_WAIT_EMPTY) {
+      enterState(ST_READY);
     }
 
     return;
   }
 
   if (
-    mode == MODE_WAIT_EMPTY ||
-    r.card == CARD_UNKNOWN
+    state == ST_WAIT_EMPTY ||
+    m.card == CARD_UNKNOWN
   ) {
     return;
   }
 
-  // Another colour can immediately trigger
-  // another ticket validation.
-
-  if (r.card != lastTriggered) {
-    newTicket(r.card);
+  if (m.card != lastTriggered) {
+    newTicket(m.card);
   }
 }
 
 // =====================================================
-// 18. RECAPTURE EMPTY BACKGROUND
-// =====================================================
-
-void recaptureEmpty() {
-  displayText(
-    "SAVING EMPTY...",
-    "NO CARD PLEASE",
-    30, 65, 170
-  );
-
-  delay(200);
-
-  if (!captureBackground()) {
-    displayText(
-      "BG NOT STABLE",
-      "TAP TO RETRY",
-      255, 40, 0
-    );
-
-    delay(550);
-
-    if (mode == MODE_CONFIRM_EMPTY) {
-      displayText(
-        "REMOVE ALL CARDS",
-        "TAP WHEN EMPTY",
-        30, 65, 170
-      );
-    } else {
-      enterMode(MODE_WAIT_EMPTY);
-    }
-
-    return;
-  }
-
-  lastTriggered = CARD_UNKNOWN;
-  candidate = CARD_UNKNOWN;
-  candidateCount = 0;
-
-  lastScan = millis();
-
-  enterMode(MODE_WAIT_EMPTY);
-}
-
-// =====================================================
-// 19. TOUCH CONTROLS
-// =====================================================
-
-void shortTap() {
-  if (mode == MODE_CAL) {
-    captureCard();
-  }
-
-  else if (
-    mode == MODE_CONFIRM_EMPTY ||
-    mode == MODE_WAIT_EMPTY ||
-    mode == MODE_READY
-  ) {
-    // Only do this with NO CARD in front of sensor.
-    recaptureEmpty();
-  }
-
-  else if (mode == MODE_STATIC) {
-    effectIndex = (effectIndex + 1) % 5;
-    showStatic();
-  }
-
-  else if (mode == MODE_AMBIENT) {
-    effectIndex = (effectIndex + 1) % 5;
-    showAmbient();
-  }
-}
-
-void longPress() {
-  if (
-    mode == MODE_CAL ||
-    mode == MODE_CONFIRM_EMPTY ||
-    mode == MODE_WAIT_EMPTY ||
-    mode == MODE_RESET
-  ) {
-    return;
-  }
-
-  lastTriggered = CARD_UNKNOWN;
-  candidate = CARD_UNKNOWN;
-  candidateCount = 0;
-
-  enterMode(MODE_RESET);
-}
-
-void updateTouch() {
-  bool current =
-    digitalRead(PIN_TOUCH) == HIGH;
-
-  unsigned long now = millis();
-
-  if (current != touchRawPrev) {
-    touchRawPrev = current;
-    touchChanged = now;
-  }
-
-  if (
-    current != touchStable &&
-    now - touchChanged >= DEBOUNCE_MS
-  ) {
-    touchStable = current;
-
-    if (current) {
-      pressedAt = now;
-      longPressDone = false;
-    } else if (!longPressDone) {
-      shortTap();
-    }
-  }
-
-  if (
-    touchStable &&
-    !longPressDone &&
-    mode != MODE_CAL &&
-    now - pressedAt >= LONG_PRESS_MS
-  ) {
-    longPressDone = true;
-    longPress();
-  }
-}
-
-// =====================================================
-// 20. AMBIENT RGB PREVIEW
+// 20. AMBIENT ANIMATION
 // =====================================================
 
 void animateAmbient() {
   unsigned long now = millis();
 
-  if (now - lastAnim < ANIMATION_MS) {
+  if (now - lastAnimAt < ANIMATION_MS) {
     return;
   }
 
-  lastAnim = now;
+  lastAnimAt = now;
 
-  float t =
-    (now - stateTime) / 1000.0f;
-
-  float w =
-    0.5f + 0.5f * sinf(t * 2.0f);
+  float t = (now - stateAt) / 1000.0f;
+  float w = 0.5f + 0.5f * sinf(2.0f * t);
 
   int r = 0;
   int g = 0;
@@ -942,13 +816,11 @@ void animateAmbient() {
 
   switch (effectIndex % 5) {
     case 0:
-      // Blue-purple breathing
       r = 20 + int(120 * w);
       b = 140 + int(100 * (1 - w));
       break;
 
     case 1:
-      // Red-white alternating
       if ((now / 500UL) % 2 == 0) {
         r = 245;
       } else {
@@ -957,20 +829,17 @@ void animateAmbient() {
       break;
 
     case 2:
-      // Ocean
       g = 30 + int(115 * w);
       b = 135 + int(90 * (1 - w));
       break;
 
     case 3:
-      // Warm glow
       r = 140 + int(105 * w);
       g = 30 + int(80 * w);
       b = 5;
       break;
 
     default:
-      // Rainbow
       r = 120 + int(
         115 * sinf(t * 1.4f)
       );
@@ -993,90 +862,187 @@ void animateAmbient() {
 }
 
 // =====================================================
-// 21. OUTPUT STATE UPDATES
+// 21. OUTPUT UPDATES
 // =====================================================
 
 void updateOutputs() {
   unsigned long now = millis();
 
   if (
-    mode == MODE_GRANTED &&
-    now - stateTime >= CONFIRM_MS
+    state == ST_GRANTED &&
+    now - stateAt >= GRANTED_MS
   ) {
     effectIndex =
-      (ticket == CARD_YELLOW) ? 1 : 0;
+      (currentTicket == CARD_YELLOW) ? 1 : 0;
 
     if (
-      ticket == CARD_YELLOW ||
-      ticket == CARD_GREEN
+      currentTicket == CARD_YELLOW ||
+      currentTicket == CARD_GREEN
     ) {
-      enterMode(MODE_STATIC);
+      enterState(ST_STATIC);
     } else {
-      enterMode(MODE_AMBIENT);
+      enterState(ST_AMBIENT);
     }
-  }
-
-  else if (mode == MODE_DENIED) {
-    if (now - stateTime >= DENIED_MS) {
-      enterMode(MODE_READY);
-    }
-
-    else if (now - lastAnim >= ANIMATION_MS) {
-      lastAnim = now;
+  } else if (state == ST_DENIED) {
+    if (now - stateAt >= DENIED_MS) {
+      enterState(ST_READY);
+    } else if (now - lastAnimAt >= ANIMATION_MS) {
+      lastAnimAt = now;
 
       lcd.setRGB(
-        ((now - stateTime) / 270UL) % 2 == 0
+        ((now - stateAt) / 270UL) % 2 == 0
           ? 255 : 0,
         0,
         0
       );
     }
-  }
-
-  else if (
-    mode == MODE_NO_MODE &&
-    now - stateTime >= 1400UL
+  } else if (
+    state == ST_NO_MODE &&
+    now - stateAt >= 1400UL
   ) {
-    enterMode(MODE_READY);
-  }
-
-  else if (
-    mode == MODE_RESET &&
-    now - stateTime >= RESET_MS
-  ) {
-    enterMode(MODE_WAIT_EMPTY);
-  }
-
-  else if (mode == MODE_AMBIENT) {
+    enterState(ST_READY);
+  } else if (state == ST_AMBIENT) {
     animateAmbient();
   }
 }
 
 // =====================================================
-// 22. SETUP
+// 22. SHORT TAP
+// =====================================================
+
+void shortTap() {
+  if (state == ST_CALIBRATE) {
+    calibrateCurrentCard();
+  } else if (state == ST_BG_CONFIRM) {
+    confirmEmptyBackground();
+  } else if (state == ST_STATIC) {
+    effectIndex = (effectIndex + 1) % 5;
+    showStatic();
+  } else if (state == ST_AMBIENT) {
+    effectIndex = (effectIndex + 1) % 5;
+    showAmbient();
+  }
+}
+
+// =====================================================
+// 23. LONG HOLD: 3 SECONDS
+// =====================================================
+
+void requestBackgroundRecheck() {
+  // Keep calibration progress if currently calibrating.
+
+  resumeCalibrationAfterBg =
+    (state == ST_CALIBRATE);
+
+  candidate = CARD_UNKNOWN;
+  candidateCount = 0;
+
+  Serial.println(
+    "3-5s HOLD: Environment recheck requested."
+  );
+
+  enterState(ST_BG_CONFIRM);
+}
+
+// =====================================================
+// 24. LONG HOLD: 5 SECONDS
+// =====================================================
+
+void rebootDevice() {
+  Serial.println(
+    "5s HOLD: Rebooting and restarting FULL calibration."
+  );
+
+  displayText(
+    "RESTARTING...",
+    "RECALIBRATING",
+    245, 245, 245
+  );
+
+  delay(250);
+  Serial.flush();
+
+  // Real MCU software reset for MKR WiFi 1010.
+  NVIC_SystemReset();
+}
+
+// =====================================================
+// 25. TOUCH GESTURE RECOGNITION
+// =====================================================
+
+void processTouch() {
+  bool raw =
+    digitalRead(TOUCH_PIN) == HIGH;
+
+  unsigned long now = millis();
+
+  if (raw != touchRawPrevious) {
+    touchRawPrevious = raw;
+    touchEdgeAt = now;
+  }
+
+  // Debounce touch state.
+
+  if (
+    raw != touchStable &&
+    now - touchEdgeAt >= DEBOUNCE_MS
+  ) {
+    touchStable = raw;
+
+    if (raw) {
+      // Touch has started.
+
+      touchPressedAt = now;
+    } else {
+      // Touch has ended.
+      // Decide the action only AFTER release.
+
+      unsigned long held =
+        now - touchPressedAt;
+
+      if (held >= REBOOT_HOLD_MS) {
+        rebootDevice();
+      } else if (held >= BG_HOLD_MS) {
+        requestBackgroundRecheck();
+      } else {
+        shortTap();
+      }
+    }
+  }
+}
+
+// =====================================================
+// 26. SETUP
 // =====================================================
 
 void setup() {
   Serial.begin(115200);
 
-  pinMode(PIN_S0, OUTPUT);
-  pinMode(PIN_S1, OUTPUT);
-  pinMode(PIN_S2, OUTPUT);
-  pinMode(PIN_S3, OUTPUT);
+  pinMode(S0_PIN, OUTPUT);
+  pinMode(S1_PIN, OUTPUT);
+  pinMode(S2_PIN, OUTPUT);
+  pinMode(S3_PIN, OUTPUT);
 
-  pinMode(PIN_OUT, INPUT);
-  pinMode(PIN_TOUCH, INPUT);
+  pinMode(OUT_PIN, INPUT);
+  pinMode(TOUCH_PIN, INPUT);
 
-  // TCS3200: 20% frequency scaling
-  digitalWrite(PIN_S0, HIGH);
-  digitalWrite(PIN_S1, LOW);
+  // TCS3200: 20% frequency scaling.
+
+  digitalWrite(S0_PIN, HIGH);
+  digitalWrite(S1_PIN, LOW);
 
   Wire.begin();
   lcd.init();
 
   Serial.println(
-    "ColourPass v1.0.3"
+    "ColourPass v1.0.4"
   );
+
+  Serial.println(
+    "3s background / 5s restart"
+  );
+
+  // Automatic background capture on startup.
 
   displayText(
     "CLEAR SENSOR",
@@ -1085,8 +1051,6 @@ void setup() {
   );
 
   delay(3000);
-
-  // Initial automatic background learning
 
   while (!captureBackground()) {
     displayText(
@@ -1098,18 +1062,16 @@ void setup() {
     delay(1500);
   }
 
-  calIndex = 0;
-  mode = MODE_CAL;
-
-  showCalibration();
+  calibrationIndex = 0;
+  enterState(ST_CALIBRATE);
 }
 
 // =====================================================
-// 23. MAIN LOOP
+// 27. MAIN LOOP
 // =====================================================
 
 void loop() {
-  updateTouch();
-  processColour();
+  processTouch();
+  scanTickets();
   updateOutputs();
 }

@@ -237,4 +237,4 @@ The software includes reconnection mechanisms, but network reliability and laten
 - MQTT transmission is not currently protected by TLS.
 - Remote Lumi simulation does not establish that the physical Vespera installation has been tested successfully.
 - The final physical enclosure and extended battery-powered operation remain to be evaluated.
-- 
+

@@ -19,7 +19,7 @@
  - Hold 5+ seconds: restart and recalibrate
 
  MQTT:
- - Luminaire ID 25
+ - Luminaire ID XX
  - 216 RGB bytes
 */
 

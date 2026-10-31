@@ -1,0 +1,13 @@
+# Wi-Fi and MQTT credentials
+arduino_secrets.h
+
+# Environment and private key files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# System files
+.DS_Store
+__MACOSX/

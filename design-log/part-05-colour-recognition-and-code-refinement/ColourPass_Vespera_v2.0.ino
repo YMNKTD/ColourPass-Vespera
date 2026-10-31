@@ -1,6 +1,6 @@
 
 /*
- ColourPass -> Vespera v3.0
+ ColourPass -> Vespera v2.0
  Arduino MKR WiFi 1010
 
  Features:

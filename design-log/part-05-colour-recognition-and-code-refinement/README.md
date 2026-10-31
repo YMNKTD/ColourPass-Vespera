@@ -81,7 +81,7 @@ This stage provides qualitative test observations; it does not claim a measured 
 | File | Purpose |
 | --- | --- |
 | [`Colour Calibration Reference Table.xlsx`](Colour%20Calibration%20Reference%20Table.xlsx) | Recorded colour-reference measurements |
-| [`ColourPass_Vespera_v2.0.ino`](ColourPass_Vespera_v2.0.ino) | Main sketch containing the updated demonstration workflow (v3.0 logic) |
+| [`ColourPass_Vespera_v2.0.ino`](ColourPass_Vespera_v2.0.ino) | Main sketch containing the updated demonstration workflow|
 | [`ColourSensor.cpp`](ColourSensor.cpp) | Sensor readings, classification and preset colour profiles |
 | [`ColourSensor.h`](ColourSensor.h) | Colour-sensor declarations, including preset loading |
 | `Vespera_*.jpg` | Photographic evidence of real lighting outputs |

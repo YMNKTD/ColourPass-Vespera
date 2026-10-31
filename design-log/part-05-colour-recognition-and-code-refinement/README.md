@@ -44,13 +44,12 @@ The refined program now:
 
 Keeping the automatic background measurement is important because environmental lighting can vary, even when the reference values are stored in the code. A three-second hold still requests a background recheck; a five-second hold restarts the controller and reloads the saved profiles.
 
-The current main sketch in this folder is named [`ColourPass_Vespera_v2.0.ino`](ColourPass_Vespera_v2.0.ino), although its source header identifies the updated **v3.0** demonstration logic. The preset data and loading function are in [`ColourSensor.cpp`](ColourSensor.cpp) and [`ColourSensor.h`](ColourSensor.h).
 
 ## 4. Vespera Lighting Tests
 
 After collecting the colour measurements and updating the code, I tested the controller with the **real Vespera installation in the Connected Environments Lab at One Pool Street**. The photographs below document lighting effects successfully displayed during on-site testing.
 
-### Bayern Lighting
+### FC Bayern Lighting
 
 ![Vespera Bayern lighting effect](Vespera_Bayern.jpg)
 

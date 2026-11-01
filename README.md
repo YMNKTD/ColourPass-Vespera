@@ -183,49 +183,7 @@ Surrounding light and variations in card positioning appeared to affect the sens
 
 To address this, I added a small raised cardboard frame around the colour sensor. This modification was intended to reduce interference from surrounding light and provide a more consistent scanning position for coloured tickets. The retesting suggested improved recognition stability/
 
-## 7. Colour Calibration and Testing
-
-Colour recognition was further refined through on-site testing in the **Connected Environments Lab at One Pool Street, UCL East**.
-
-Raw sensor readings were collected for nine coloured cards. The measured R, G, B and clear-channel pulse values were recorded and incorporated into the program as predefined reference profiles.
-
-The latest implementation uses:
-
-- Preset colour-reference profiles.
-- Median filtering to reduce isolated reading fluctuations.
-- Normalised colour features and distance-based classification.
-- Background measurement to help distinguish cards from an empty scanning area.
-- Consecutive matching readings to reduce accidental detections.
-
-Unlike earlier versions, the latest program does not require all nine colour cards to be recalibrated during every startup. Instead, it loads the stored profiles and measures the current empty background before enabling normal ticket scanning.
-
-The full measurements and corresponding code modifications are documented in [Part 05](design-log/part-05-colour-recognition-and-code-refinement/README.md).
-
-## 8. Vespera Lighting Demonstration
-
-During development, lighting effects were first tested remotely using the Lumi web simulator.
-
-Following hardware integration, enclosure construction and colour-recognition refinement, selected effects were successfully displayed on the physical Vespera lighting.
-
-The following photos show some examples of the on-site lighting output.
-
-### Rainbow Lighting
-
-<!-- Rainbow Lighting -->
-<p align="center">
-  <img src="design-log/part-05-colour-recognition-and-code-refinement/Vespera__Rainbow.jpg" alt="Vespera Rainbow Lighting" width="420">
-</p>
-
-### Yellow Static Lighting
-
-<!-- Yellow Lighting -->
-<p align="center">
-  <img src="design-log/part-05-colour-recognition-and-code-refinement/Vespera__Yellow.jpg" alt="Vespera Yellow Lighting" width="420">
-</p>
-
-These photographs provide evidence of successful lighting output on the real installation under the tested conditions.
-
-## 9. Source Code and Reproduction
+## 7. Source Code and Reproduction
 
 The current source files are available in the [code](code/) directory.
 
@@ -251,5 +209,5 @@ To reproduce the project:
 The project requires access to a compatible MQTT endpoint and an appropriately configured lighting receiver. The physical Vespera installation is not required for reviewing the source code or development documentation.
 
 ##
-*Designed and developed by Monong Yang (Morgan)**
+*Designed and developed by Monong Yang (Morgan)*
 

@@ -22,11 +22,9 @@ The prototype combines physical interaction, sensor-based decision-making, embed
 
 ## 2. Initial Concept and Design
 
-The project began with hand-drawn sketches exploring the system's intended functionality and physical arrangement.
+ColourPass began with hand-drawn sketches exploring how coloured tickets could be used as a physical interface for controlling the Vespera lighting installation.
 
-The initial concept divided coloured tickets into three categories: rejected tickets, tickets activating static lighting and tickets activating ambient lighting. Touch interaction was introduced to allow users to change lighting effects without repeatedly scanning cards.
-
-The physical design proposed a compact enclosure containing the colour sensor, LCD screen, touch sensor, Arduino board, power switch and internal wiring.
+The initial concept introduced colour-based ticket validation, static and ambient lighting modes, and touch interaction. The physical design was subsequently developed to accommodate the electronic components and improve usability.
 
 ### Initial System Logic
 
@@ -61,9 +59,6 @@ The interaction follows a sequence:
 | Green | Granted | Static Mode – Green |
 | Blue | Granted | Ambient Mode – Blue Mood |
 | Purple | Granted | Ambient Mode – Rainbow |
-| White | Not authorised | No new lighting action |
-| Black | Not authorised | No new lighting action |
-| Unknown | Not authorised | No new lighting action |
 
 When access is granted, a two-second animated green-and-white confirmation is displayed before entering the appropriate lighting mode.
 
@@ -149,30 +144,21 @@ ColourPass was developed through five documented stages, progressing from indivi
 
 Each development log records the objectives, implementation, testing evidence, observations and limitations of that stage.
 
-## 6. Source Code and Reproduction
+## 6. Source Code
 
 The current source files are available in the [code](code/) directory.
 
-The software uses:
+## 7. Declaration of Generative AI Use
 
-- Arduino IDE and Arduino MKR WiFi 1010 board support
-- WiFiNINA
-- PubSubClient
-- Adafruit NeoPixel
-- Waveshare LCD1602 RGB library
+I acknowledge the use of **ChatGPT (GPT-6, OpenAI, https://chatgpt.com)** as an assistive tool during the development and documentation of ColourPass–Vespera.
 
-To reproduce the project:
+AI assistance was used for:
 
-1. Prepare an Arduino MKR WiFi 1010 and connect the required hardware.
-2. Copy the source files from `code/` into a single Arduino sketch folder named to match the main `.ino` file.
-3. Install the required Arduino libraries.
-4. Create a local `arduino_secrets.h` using `arduino_secrets.h.example.h` as a template.
-5. Configure the authorised MQTT broker, port and topic in `Config.h`.
-6. Upload the sketch and open the Serial Monitor at 115200 baud.
-7. Connect to the permitted network, then keep the scanning area empty during initial background measurement.
-8. Present a coloured ticket and observe the system response.
+- **Programming support:** Generating, debugging and refining some of the Arduino code, including colour recognition, touch interaction and MQTT communication.
+- **Technical guidance:** Explaining hardware integration, communication protocols and troubleshooting approaches.
+- **Documentation:** Supporting the organisation, drafting and English-language refinement of GitHub README files.
 
-The project requires access to a compatible MQTT endpoint and an appropriately configured lighting receiver. The physical Vespera installation is not required for reviewing the source code or development documentation.
+AI-generated suggestions and code were reviewed, adapted and tested during development. The project concept, physical prototype construction, experimental measurements and final design decisions were my own.
 
 ##
 *Designed and developed by Monong Yang (Morgan)*

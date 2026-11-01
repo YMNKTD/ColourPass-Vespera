@@ -17,7 +17,10 @@ Users present a coloured card to the device. An Arduino MKR WiFi 1010 processes 
 
 The prototype combines **physical interaction, sensor-based decision-making, embedded programming and networked lighting control**.
 
-![ColourPass Assembled Physical Prototype](design-log/part-04-physical-prototype-construction/ColourPass_Assembled_Physical_Prototype.jpeg)
+<!-- Physical Prototype -->
+<p align="center">
+  <img src="design-log/part-04-physical-prototype-construction/ColourPass_Assembled_Physical_Prototype.jpeg" alt="ColourPass Physical Prototype" width="420">
+</p>
 
 ## 2. Initial Concept and Design
 
@@ -29,11 +32,17 @@ The physical design proposed a compact enclosure containing the colour sensor, L
 
 ### Initial System Logic
 
-![Initial Concept and System Logic](Images/initial-concept-and-system-logic.jpg)
+<!-- Initial System Logic -->
+<p align="center">
+  <img src="Images/initial-concept-and-system-logic.jpg" alt="Initial System Logic" width="350">
+</p>
 
 ### Initial Physical Prototype Design
 
-![Initial Physical Prototype Sketch](Images/initial-physical-prototype-sketch.jpg)
+<!-- Initial Physical Prototype -->
+<p align="center">
+  <img src="Images/initial-physical-prototype-sketch.jpg" alt="Initial Physical Prototype Design" width="400">
+</p>
 
 These sketches provided a starting point for development. The design was subsequently modified in response to hardware integration, colour-recognition testing and practical prototyping constraints.
 
@@ -174,16 +183,6 @@ Surrounding light and variations in card positioning appeared to affect the sens
 
 To address this, I added a small raised cardboard frame around the colour sensor. This modification was intended to reduce interference from surrounding light and provide a more consistent scanning position for coloured tickets. The retesting suggested improved recognition stability/
 
-### Reflection
-
-These iterations demonstrate that developing a functional IoT prototype involves more than connecting electronic components and writing software.
-
-The addition of an LCD improved user feedback, the networking refinements addressed communication reliability, and the physical modification improved the sensor's operating conditions.
-
-Together, these changes highlight the importance of **interaction design, network communication and physical prototyping** in creating a more reliable and usable connected system.
-
-Further details and testing evidence are documented in the individual development logs.
-
 ## 6. Colour Calibration and Testing
 
 Colour recognition was further refined through on-site testing in the **Connected Environments Lab at One Pool Street, UCL East**.
@@ -212,11 +211,17 @@ The following photos show some examples of the on-site lighting output.
 
 ### Rainbow Lighting
 
-![Vespera Rainbow Lighting](design-log/part-05-colour-recognition-and-code-refinement/Vespera__Rainbow.jpg)
+<!-- Rainbow Lighting -->
+<p align="center">
+  <img src="design-log/part-05-colour-recognition-and-code-refinement/Vespera__Rainbow.jpg" alt="Vespera Rainbow Lighting" width="420">
+</p>
 
 ### Yellow Static Lighting
 
-![Vespera Yellow Lighting](design-log/part-05-colour-recognition-and-code-refinement/Vespera__Yellow.jpg)
+<!-- Yellow Lighting -->
+<p align="center">
+  <img src="design-log/part-05-colour-recognition-and-code-refinement/Vespera__Yellow.jpg" alt="Vespera Yellow Lighting" width="420">
+</p>
 
 These photographs provide evidence of successful lighting output on the real installation under the tested conditions.
 
@@ -245,6 +250,6 @@ To reproduce the project:
 
 The project requires access to a compatible MQTT endpoint and an appropriately configured lighting receiver. The physical Vespera installation is not required for reviewing the source code or development documentation.
 
-
-**Designed and developed by Monong Yang (Morgan)**
+##
+*Designed and developed by Monong Yang (Morgan)**
 

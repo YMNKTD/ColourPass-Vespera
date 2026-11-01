@@ -3,19 +3,17 @@
   <img src="Images/colourpass-icon.png" alt="ColourPass Logo" width="220">
 </p>
 
-# ColourPass–Vespera
-## An Interactive Colour-Based Ticket Validation and Lighting Control System
-
+# ColourPass
 
 ## 1. Project Overview
 
-**ColourPass–Vespera** is an interactive Internet of Things (IoT) prototype that transforms colour recognition into a physical interface for controlling the Vespera lighting installation at UCL East.
+**ColourPass** is an IoT prototype that transforms colour recognition into a physical interface for controlling the Vespera lighting.
 
 Inspired by ticket validation systems used in public transport and football event venues, the project explores how simple physical interactions can be translated into different lighting experiences within a connected environment.
 
 Users present a coloured card to the device. An Arduino MKR WiFi 1010 processes the colour sensor readings, determines the validation outcome and communicates lighting instructions to Vespera through Wi-Fi and MQTT. A touch sensor allows users to switch between lighting effects, while an LCD screen provides immediate feedback.
 
-The prototype combines **physical interaction, sensor-based decision-making, embedded programming and networked lighting control**.
+The prototype combines physical interaction, sensor-based decision-making, embedded programming and networked lighting control.
 
 <!-- Physical Prototype -->
 <p align="center">
@@ -151,39 +149,7 @@ ColourPass was developed through five documented stages, progressing from indivi
 
 Each development log records the objectives, implementation, testing evidence, observations and limitations of that stage.
 
-## 6. Key Design Iterations
-
-Throughout development, ColourPass underwent several design iterations in response to practical challenges and testing observations. Three significant improvements demonstrate how the project evolved from its initial concept into a more complete interactive IoT prototype.
-
-### Iteration 1 — Adding an LCD Screen
-
-The original concept consisted of a colour sensor, touch sensor and Arduino controller, without a dedicated display.
-
-As development progressed, I realised that lighting feedback alone might not clearly communicate the system's current state, particularly during ticket validation, colour calibration and network connection.
-
-I therefore introduced an LCD1602 RGB screen to provide real-time information, including ticket validation results, lighting modes, Wi-Fi/MQTT connection status and reset instructions.
-
-This modification improved the clarity of user interaction and reduced reliance on the Arduino Serial Monitor.
-
-### Iteration 2 — Improving Wi-Fi and MQTT Connectivity
-
-During initial MQTT integration, I encountered connectivity problems when attempting to communicate with Vespera through the student accommodation Wi-Fi network. Testing with a mobile hotspot successfully established communication with the MQTT broker.
-
-This experience highlighted the importance of network compatibility and connection reliability in IoT systems.
-
-The software was subsequently refined to include automatic Wi-Fi and MQTT reconnection attempts, connection-failure notifications on the LCD screen, and a startup mechanism that waits for network connectivity before enabling normal ticket interaction.
-
-These improvements made network behaviour more transparent and helped the prototype recover from temporary communication failures. However, long-term connection reliability still requires further evaluation.
-
-### Iteration 3 — Improving the Colour Sensor's Physical Environment
-
-After assembling the components inside the cardboard enclosure, I observed that colour recognition was sometimes less consistent than during earlier hardware testing.
-
-Surrounding light and variations in card positioning appeared to affect the sensor readings.
-
-To address this, I added a small raised cardboard frame around the colour sensor. This modification was intended to reduce interference from surrounding light and provide a more consistent scanning position for coloured tickets. The retesting suggested improved recognition stability/
-
-## 7. Source Code and Reproduction
+## 6. Source Code and Reproduction
 
 The current source files are available in the [code](code/) directory.
 

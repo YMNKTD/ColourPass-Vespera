@@ -21,10 +21,15 @@ void VesperaClient::tick() {
   uint8_t wifiStatus = WiFi.status();
   if (wifiStatus == WL_NO_MODULE) {
     if (wifiWasConnected_) Serial.println(F("WiFi MODULE UNAVAILABLE"));
+    if (!wifiModuleMissingReported_) {
+      wifiFailurePending_ = true;
+      wifiModuleMissingReported_ = true;
+    }
     wifiWasConnected_ = false;
     // Do not block the physical ticket reader if the WiFi radio is unavailable.
     return;
   }
+  wifiModuleMissingReported_ = false;
   if (wifiStatus != WL_CONNECTED) {
     if (wifiWasConnected_) {
       Serial.println(F("WiFi disconnected; MQTT reconnect pending"));
@@ -32,6 +37,8 @@ void VesperaClient::tick() {
     }
     wifiWasConnected_ = false;
     if (!wifiEverAttempted_ || now - wifiAttemptAt_ >= Config::WIFI_RETRY_MS) {
+      // Report the previous attempt only after its retry interval expires.
+      if (wifiEverAttempted_) wifiFailurePending_ = true;
       wifiEverAttempted_ = true;
       wifiAttemptAt_ = now;
       const char* network = SECRET_SSID;
@@ -52,6 +59,8 @@ void VesperaClient::tick() {
   }
   if (!wifiWasConnected_) {
     wifiWasConnected_ = true;
+    wifiEverAttempted_ = false;
+    wifiFailurePending_ = false;
     Serial.print(F("WiFi connected. IP: "));
     Serial.println(WiFi.localIP());
     mqttEverAttempted_ = false; // reconnect as soon as Wi-Fi returns
@@ -63,8 +72,10 @@ void VesperaClient::tick() {
       wifi_.stop();
       if (mqtt_.connect(clientId_, SECRET_MQTTUSER, SECRET_MQTTPASS)) {
         newlyConnected_ = true;
+        mqttFailurePending_ = false;
         Serial.println(F("MQTT connected"));
       } else {
+        mqttFailurePending_ = true;
         Serial.print(F("MQTT error code: "));
         Serial.println(mqtt_.state());
       }
@@ -77,6 +88,18 @@ void VesperaClient::tick() {
 bool VesperaClient::freshlyConnected() {
   bool event = newlyConnected_;
   newlyConnected_ = false;
+  return event;
+}
+
+bool VesperaClient::takeWiFiFailure() {
+  bool event = wifiFailurePending_;
+  wifiFailurePending_ = false;
+  return event;
+}
+
+bool VesperaClient::takeMqttFailure() {
+  bool event = mqttFailurePending_;
+  mqttFailurePending_ = false;
   return event;
 }
 
@@ -111,7 +134,8 @@ void VesperaClient::printStatus() {
   }
   Serial.print(F("MQTT: "));
   Serial.println(mqtt_.connected() ? F("CONNECTED") : F("NOT CONNECTED"));
-  Serial.print(F("MQTT state: ")); Serial.println(mqtt_.state());
+  Serial.print(F("MQTT state: "));
+  Serial.println(mqtt_.state());
   Serial.print(F("Topic: ")); Serial.println(Config::MQTT_TOPIC);
   Serial.print(F("Successful publishes: ")); Serial.println(publishCount_);
   Serial.print(F("Last publish result: "));

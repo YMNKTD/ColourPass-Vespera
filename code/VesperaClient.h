@@ -11,6 +11,8 @@ public:
   bool connected() { return mqtt_.connected(); }
   bool publish(const uint8_t* bytes, unsigned int length);
   bool freshlyConnected(); // true once after each successful MQTT connection
+  bool takeWiFiFailure();
+  bool takeMqttFailure();
   void printStatus(); // Serial Monitor: network, broker, last publish
 private:
   WiFiClient wifi_;
@@ -22,6 +24,9 @@ private:
   bool mqttEverAttempted_ = false;
   bool newlyConnected_ = false;
   bool wifiWasConnected_ = false;
+  bool wifiFailurePending_ = false;
+  bool mqttFailurePending_ = false;
+  bool wifiModuleMissingReported_ = false;
   bool publishEverLogged_ = false;
   unsigned long lastPublishLogAt_ = 0;
   unsigned long lastPublishAt_ = 0;

@@ -859,7 +859,7 @@ void setup() {
   vespera.begin();
 
   Serial.println(
-    F("ColourPass -> Vespera v3.0 | preset colours + white standby"));
+    F("ColourPass -> Vespera | preset colours + white standby"));
 
   Serial.println(
     F("Home MQTT tests: 1=Bayern 2=BlueMood 3=Rainbow 0=Off x=exit s=status"));
